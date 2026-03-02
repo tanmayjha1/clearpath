@@ -1,4 +1,4 @@
-# ClearPath — React Native Mobile App
+# ClearPath
 
 ClearPath is a mobile application to be later integrated into OBUs built with React Native and Expo that simulates an incoming emergency response vehicle, alerting civilian drivers in its path.
 
