@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ClearPath",
+    "slug": "clearpath",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "googleMapsApiKey": "AIzaSyD7rWrs_T3dVwan5nk3eOHzexR-gpkH1MU"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0F172A"
+      },
+      "googleMaps": {
+        "apiKey": "AIzaSyD7rWrs_T3dVwan5nk3eOHzexR-gpkH1MU"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
