@@ -14,7 +14,7 @@ export function DispatchProvider({ children }) {
     const [countdown, setCountdown] = useState(0);
     const [routePoints, setRoutePoints] = useState([]);
     const [ambulanceIndex, setAmbulanceIndex] = useState(0);
-    const [driverCleared, setDriverCleared] = useState(false);
+    // No driverCleared state — alerts auto-dismiss when car moves off-route
     const [dispatchData, setDispatchData] = useState(null); // Full Supabase row
 
     // Selected route from location selector (Part 1)
@@ -35,7 +35,6 @@ export function DispatchProvider({ children }) {
         setRoutePoints(route);
         setAmbulanceIndex(0);
         setCountdown(route.length > 0 ? route.length : AMBULANCE_CONFIG.tripDurationSeconds);
-        setDriverCleared(false);
         setDispatchData(rowData);
     }, []);
 
@@ -44,9 +43,7 @@ export function DispatchProvider({ children }) {
         setCountdown(remaining);
     }, []);
 
-    const clearLane = useCallback(() => {
-        setDriverCleared(true);
-    }, []);
+    // No clearLane — alerts auto-dismiss when car moves off-route
 
     const resetDispatch = useCallback(() => {
         setIsDispatched(false);
@@ -55,7 +52,6 @@ export function DispatchProvider({ children }) {
         setCountdown(0);
         setRoutePoints([]);
         setAmbulanceIndex(0);
-        setDriverCleared(false);
         setDispatchData(null);
         setSelectedRoute(null);
     }, []);
@@ -69,13 +65,11 @@ export function DispatchProvider({ children }) {
                 countdown,
                 routePoints,
                 ambulanceIndex,
-                driverCleared,
                 dispatchData,
                 selectedRoute,
                 setSelectedRoute,
                 triggerDispatch,
                 updateAmbulance,
-                clearLane,
                 resetDispatch,
             }}
         >

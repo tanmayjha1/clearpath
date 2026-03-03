@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS active_vehicles (
     lng FLOAT NOT NULL,
     on_route BOOLEAN DEFAULT false,
     is_nearest BOOLEAN DEFAULT false,
-    has_cleared BOOLEAN DEFAULT false,
     last_updated TIMESTAMPTZ DEFAULT now()
 );
 

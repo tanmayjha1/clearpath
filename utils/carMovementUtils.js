@@ -186,39 +186,4 @@ export function getMovementIntervalMs(speedKmh, waypointDistanceMeters = 150) {
     return (waypointDistanceMeters / speedMs) * 1000;
 }
 
-/**
- * Find the nearest car to the ambulance position
- * Prioritizes cars that are on the route (within 300m)
- * @param {Object} ambulancePos - { latitude, longitude }
- * @param {Array} cars - Array of car objects with { id, coordinate }
- * @param {Array} routePoints - Route polyline points
- * @returns {Object|null} The nearest car object, or null
- */
-export function findNearestCar(ambulancePos, cars, routePoints) {
-    if (!cars || cars.length === 0) return null;
-
-    let nearestOnRoute = null;
-    let nearestOnRouteDistance = Infinity;
-    let nearestOverall = null;
-    let nearestOverallDistance = Infinity;
-
-    for (const car of cars) {
-        const dist = haversineDistance(ambulancePos, car.coordinate);
-        const onRoute = isNearRoute(car.coordinate, routePoints, 300);
-
-        // Track nearest on-route car
-        if (onRoute && dist < nearestOnRouteDistance) {
-            nearestOnRoute = car;
-            nearestOnRouteDistance = dist;
-        }
-
-        // Track nearest overall
-        if (dist < nearestOverallDistance) {
-            nearestOverall = car;
-            nearestOverallDistance = dist;
-        }
-    }
-
-    // Prefer on-route car, fallback to nearest overall
-    return nearestOnRoute || nearestOverall;
-}
+// TODO: future enhancement — add function for advanced route-based car prioritization if needed

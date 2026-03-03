@@ -52,18 +52,19 @@ Dispatcher selects any origin and destination in Singapore using Google
 Places Autocomplete. The Directions API returns the optimal road route, 
 rendered as a polyline on a live map view.
 
-**Trajectory-Based Car Targeting**  
+**Simultaneous Corridor Alerting**  
 Civilian cars are generated near the route and move continuously. 
-Every 3 seconds, the system identifies which car is nearest to the 
-ambulance and on the route corridor — matching the trajectory matching 
-logic described in the Dispatch system design. Only that driver receives 
-an alert.
+Every 3 seconds, the system checks which cars are within 300m of the 
+ambulance's route corridor. All on-route cars are alerted simultaneously 
+— not just the nearest one — matching the broadcast advisory model 
+described in the Dispatch system design.
 
 **Real-Time Supabase Synchronisation**  
 Dispatcher actions — triggering a dispatch, ambulance position updates, 
-nearest car changes, lane clearance confirmations — propagate instantly 
-to all connected devices via Supabase real-time channels. This mirrors 
-the Message Broker component in the Dispatch cloud architecture.
+and on-route status changes — propagate instantly to all connected 
+devices via Supabase real-time channels. When a car moves off the route, 
+its alert auto-dismisses without any driver action. This mirrors the 
+Message Broker component in the Dispatch cloud architecture.
 
 **Device Identity Selector**  
 Each device selects a role on first launch: Dispatcher or Driver (Car A 
@@ -72,11 +73,13 @@ multi-device demos where different drivers receive alerts as the
 ambulance progresses along its route.
 
 **Multilingual AI Alerts**  
-When a driver is identified as nearest to the ambulance, ClearPath calls 
+When a driver is on the ambulance's route corridor, ClearPath calls 
 the OpenAI API to generate a calm, localised driving instruction in the 
-driver's preferred language. Supported languages: English, Mandarin, 
-Malay, and Tamil — reflecting Singapore's four official languages and 
-the equitable access principle in the Dispatch responsible design model.
+driver's preferred language. The message instructs drivers to move left 
+without revealing the ambulance's destination. Supported languages: 
+English, Mandarin, Malay, and Tamil — reflecting Singapore's four 
+official languages and the equitable access principle in the Dispatch 
+responsible design model.
 
 ---
 
@@ -85,9 +88,9 @@ the equitable access principle in the Dispatch responsible design model.
 Dispatcher Device          Supabase (Cloud)         Driver Device(s)
 ─────────────────          ────────────────          ─────────────────
 Google Places         →    dispatches table    →     Real-time listener
-Directions API        →    active_vehicles     →     Nearest car check
+Directions API        →    active_vehicles     →     On-route detection
 Ambulance animation        (real-time sync)          Alert UI trigger
-Car simulation        →    position updates    →     Lane cleared sync
+Car simulation        →    position updates    →     Auto-dismiss sync
 ```
 
 This prototype implements the following Dispatch cloud components:
@@ -96,7 +99,7 @@ This prototype implements the following Dispatch cloud components:
 |------------------------|---------------------------------------|
 | Telemetry Ingest       | Ambulance marker animated along route |
 | Corridor Engine        | isLocationOnEdge() 300m buffer        |
-| Targeting              | Nearest car detection every 3 seconds |
+| Targeting              | All on-route cars detected every 3s   |
 | Message Broker         | Supabase real-time channels           |
 | OBU Advisory Display   | Driver screen alert UI                |
 | Anonymisation          | Car IDs only, no driver identity      |
@@ -138,9 +141,9 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 See `.env.example` for reference. Never commit your `.env` file.
 
 **3. Database setup**  
-Run the following SQL scripts in your Supabase SQL Editor:
-- `active_vehicles_setup.sql`
-- `dispatches_setup.sql`
+Run `database_reset.sql` in your Supabase SQL Editor. This creates 
+both the `dispatches` and `active_vehicles` tables, disables RLS, 
+and enables real-time.
 
 **4. Start the app**
 ```bash
@@ -161,9 +164,10 @@ For the best demonstration, use 3 devices:
 | Device 2 | Driver A | Select Driver → Car A |
 | Device 3 | Driver B | Select Driver → Car B |
 
-Trigger a dispatch on Device 1. As the ambulance moves along the route, 
-alerts will shift between Driver devices based on proximity. Each driver 
-confirms lane clearance independently.
+Trigger a dispatch on Device 1. All drivers whose cars are within 300m 
+of the route corridor will receive simultaneous alerts. When a car moves 
+off the route (e.g. makes a turn), its alert dismisses automatically — 
+no driver action required.
 
 ---
 

@@ -35,7 +35,6 @@ import {
     generateCarsNearRoute,
     advanceCarToNextWaypoint,
     getMovementIntervalMs,
-    findNearestCar,
     haversineDistance,
     isNearRoute,
 } from '../utils/carMovementUtils';
@@ -94,8 +93,6 @@ export default function DispatchScreen({ navigation }) {
 
     // ─── Civilian cars ─────────────────────────────────────────────────
     const [civilianCars, setCivilianCars] = useState([]);
-    const [nearestCarId, setNearestCarId] = useState(null);
-    const [clearedCarIds, setClearedCarIds] = useState([]);
     const [flashVisible, setFlashVisible] = useState(true);
 
     // ─── Refs ───────────────────────────────────────────────────────────
@@ -151,8 +148,6 @@ export default function DispatchScreen({ navigation }) {
         // Generate 5 civilian cars near the route
         const cars = generateCarsNearRoute(route.points, 5);
         setCivilianCars(cars);
-        setClearedCarIds([]);
-        setNearestCarId(null);
 
         setRouteLoading(false);
     }, [originLocation, destLocation]);
@@ -253,35 +248,22 @@ export default function DispatchScreen({ navigation }) {
             carIntervalsRef.current.push(carInterval);
         });
 
-        // Start nearest car detection every 3 seconds
+        // Start on-route detection every 3 seconds — alert ALL on-route cars simultaneously
         const currentDispatchId = dispatchRow ? dispatchRow.id : null;
         nearestCheckRef.current = setInterval(() => {
-            setAmbulanceIdx((currentAmbIdx) => {
-                const ambulancePos = animPointsRef.current[currentAmbIdx] || animPointsRef.current[0];
-                if (!ambulancePos) return currentAmbIdx;
+            setCivilianCars((currentCars) => {
+                // Update Supabase with current positions and on-route status
+                if (currentDispatchId) {
+                    const vehicleUpdates = currentCars.map((car) => ({
+                        id: car.id,
+                        lat: car.coordinate.latitude,
+                        lng: car.coordinate.longitude,
+                        onRoute: car.onRoute,
+                    }));
+                    updateVehiclePositions(currentDispatchId, vehicleUpdates).catch(console.error);
+                }
 
-                setCivilianCars((currentCars) => {
-                    const nearest = findNearestCar(ambulancePos, currentCars, selectedRoute.routePoints);
-                    if (nearest) {
-                        setNearestCarId(nearest.id);
-                    }
-
-                    // Update Supabase with current positions
-                    if (currentDispatchId) {
-                        const vehicleUpdates = currentCars.map((car) => ({
-                            id: car.id,
-                            lat: car.coordinate.latitude,
-                            lng: car.coordinate.longitude,
-                            isNearest: nearest ? car.id === nearest.id : false,
-                            onRoute: car.onRoute,
-                        }));
-                        updateVehiclePositions(currentDispatchId, vehicleUpdates).catch(console.error);
-                    }
-
-                    return currentCars;
-                });
-
-                return currentAmbIdx;
+                return currentCars;
             });
         }, 3000);
     }, [isDispatched, selectedRoute, civilianCars, triggerDispatch, updateAmbulance]);
@@ -304,8 +286,6 @@ export default function DispatchScreen({ navigation }) {
         setRouteInfo(null);
         setSelectedRoute(null);
         setCivilianCars([]);
-        setNearestCarId(null);
-        setClearedCarIds([]);
         setOriginLocation(null);
         setDestLocation(null);
         animPointsRef.current = [];
@@ -316,9 +296,10 @@ export default function DispatchScreen({ navigation }) {
         resetDispatch();
     }, [activeDispatchId, resetDispatch]);
 
-    // ─── Flash animation for nearest car marker ────────────────────────
+    // ─── Flash animation for on-route car markers ─────────────────────
     useEffect(() => {
-        if (isDispatched && nearestCarId && !animComplete) {
+        const hasOnRouteCars = isDispatched && civilianCars.some(c => c.onRoute) && !animComplete;
+        if (hasOnRouteCars) {
             flashRef.current = setInterval(() => {
                 setFlashVisible((prev) => !prev);
             }, 500);
@@ -326,7 +307,7 @@ export default function DispatchScreen({ navigation }) {
         } else {
             setFlashVisible(true);
         }
-    }, [isDispatched, nearestCarId, animComplete]);
+    }, [isDispatched, civilianCars, animComplete]);
 
     // ─── Cleanup on unmount ────────────────────────────────────────────
     useEffect(() => {
@@ -357,8 +338,7 @@ export default function DispatchScreen({ navigation }) {
 
     // ─── Car marker color logic ────────────────────────────────────────
     const getCarPinColor = (car) => {
-        if (clearedCarIds.includes(car.id)) return 'green';
-        if (car.id === nearestCarId && isDispatched && !animComplete) {
+        if (car.onRoute && isDispatched && !animComplete) {
             return flashVisible ? 'yellow' : 'orange';
         }
         return 'blue';
@@ -435,7 +415,7 @@ export default function DispatchScreen({ navigation }) {
                         coordinate={car.coordinate}
                         title={`🚗 ${car.name}`}
                         description={
-                            car.id === nearestCarId && isDispatched
+                            car.onRoute && isDispatched
                                 ? '⚠️ ALERT: Clear the route!'
                                 : car.onRoute
                                     ? 'On route'
@@ -615,7 +595,7 @@ export default function DispatchScreen({ navigation }) {
                             <Text style={styles.statusText}>
                                 {animComplete
                                     ? `🏥 Ambulance arrived at ${selectedRoute?.destination?.label || 'destination'}`
-                                    : `🚑 Ambulance en route — ${nearestCarId ? `nearest: ${nearestCarId}` : 'detecting...'}`}
+                                    : `🚑 Ambulance en route — ${civilianCars.filter(c => c.onRoute).length} cars alerted`}
                             </Text>
                         </View>
                         {!animComplete && (

@@ -17,16 +17,16 @@ const TIMEOUT_MS = 5000; // 5 second timeout, fallback if exceeded
 
 const SYSTEM_PROMPTS = {
     english:
-        'You are a safety alert system for Singapore drivers. Generate short, clear, calm driving instructions. The instruction MUST be: "Move to the left lane as emergency responders are coming on the right lane. Maintain a safe distance as they approach." or something very similar. Do not specify other specific lanes. Maximum 2 sentences. Never use exclamation marks. Always mention the destination the ambulance is heading to.',
+        'You are a safety alert system for Singapore drivers. Generate short, clear, calm driving instructions. The instruction MUST be: "Move to the left lane as emergency responders are coming on the right lane. Maintain a safe distance as they approach." or something very similar. Do not specify other specific lanes. Maximum 2 sentences. Never use exclamation marks. Do NOT mention any destination or location name.',
 
     mandarin:
-        '你是新加坡驾驶员的安全警报系统。生成简短、清晰、冷静的驾驶指示。指示必须是：“紧急救援人员正从右侧车道驶来，请移至左侧车道。在他们靠近时保持安全距离。”或非常相似的内容。最多两句话。不要使用感叹号。必须提到救护车前往的目的地。请用简体中文回复。',
+        '你是新加坡驾驶员的安全警报系统。生成简短、清晰、冷静的驾驶指示。指示必须是：“紧急救援人员正从右侧车道驶来，请移至左侧车道。在他们靠近时保持安全距离。”或非常相似的内容。最多两句话。不要使用感叹号。不要提及任何目的地或地点名称。请用简体中文回复。',
 
     malay:
-        'Anda adalah sistem amaran keselamatan untuk pemandu di Singapura. Jana arahan pemanduan yang ringkas, jelas dan tenang. Arahan mestilah: "Sila beralih ke lorong kiri kerana responden kecemasan sedang menghampiri di lorong kanan. Jaga jarak selamat." atau yang serupa dengannya. Maksimum dua ayat. Jangan gunakan tanda seru. Sentiasa sebut destinasi ambulans. Sila balas dalam Bahasa Melayu.',
+        'Anda adalah sistem amaran keselamatan untuk pemandu di Singapura. Jana arahan pemanduan yang ringkas, jelas dan tenang. Arahan mestilah: "Sila beralih ke lorong kiri kerana responden kecemasan sedang menghampiri di lorong kanan. Jaga jarak selamat." atau yang serupa dengannya. Maksimum dua ayat. Jangan gunakan tanda seru. Jangan sebut sebarang destinasi atau nama lokasi. Sila balas dalam Bahasa Melayu.',
 
     tamil:
-        'நீங்கள் சிங்கப்பூர் ஓட்டுநர்களுக்கான பாதுகாப்பு எச்சரிக்கை அமைப்பு. சுருக்கமான, தெளிவான, அமைதியான வாகன ஓட்டுதல் வழிமுறைகளை உருவாக்கவும். "அவசர உதவி வாகனங்கள் வலது லேனில் வருவதால், இடது லேனுக்கு மாறவும். அவை நெருங்கும் போது பாதுகாப்பான தூரத்தை பராமரிக்கவும்." என்று மட்டும் கூறவும். அதிகபட்சம் இரண்டு வாக்கியங்கள். ஆச்சரியக்குறி பயன்படுத்தாதீர்கள். ஆம்புலன்ஸ் செல்லும் இடத்தைக் குறிப்பிடவும். தமிழில் பதிலளிக்கவும்.',
+        'நீங்கள் சிங்கப்பூர் ஓட்டுநர்களுக்கான பாதுகாப்பு எச்சரிக்கை அமைப்பு. சுருக்கமான, தெளிவான, அமைதியான வாகன ஓட்டுதல் வழிமுறைகளை உருவாக்கவும். "அவசர உதவி வாகனங்கள் வலது லேனில் வருவதால், இடது லேனுக்கு மாறவும். அவை நெருங்கும் போது பாதுகாப்பான தூரத்தை பராமரிக்கவும்." என்று மட்டும் கூறவும். அதிகபட்சம் இரண்டு வாக்கியங்கள். ஆச்சரியக்குறி பயன்படுத்தாதீர்கள். எந்த இடம் அல்லது செல்லுமிடம் குறிப்பிடவேண்டாம். தமிழில் பதிலளிக்கவும்.',
 };
 
 // ─── Trip context from centralized config ──────────────────────────────
@@ -47,7 +47,7 @@ export async function generateAlertMessage(countdownSeconds) {
 
     const systemPrompt = SYSTEM_PROMPTS[language] || SYSTEM_PROMPTS.english;
 
-    const userPrompt = `An ambulance is heading to ${AMBULANCE_CONFIG.destination.label}. It will reach the driver in approximately ${minutes} minutes. Generate the safety instruction to move left.`;
+    const userPrompt = `An ambulance is approaching. It will reach the driver in approximately ${minutes} minutes. Generate the safety instruction to move left. Do NOT mention any hospital name or destination.`;
 
     // If no API key, return fallback immediately
     if (!OPENAI_API_KEY) {

@@ -17,7 +17,6 @@ import { generateAlertMessage } from '../services/alertService';
 import {
   subscribeToDispatches,
   subscribeToVehicles,
-  updateVehicleCleared,
   getActiveDispatch,
   getVehicleState,
 } from '../services/supabaseClient';
@@ -32,10 +31,8 @@ export default function DriverScreen({ navigation }) {
     isDispatched,
     affectedCars,
     countdown,
-    driverCleared,
     dispatchData,
     activeDispatchId,
-    clearLane,
     triggerDispatch,
     resetDispatch,
   } = useDispatch();
@@ -57,12 +54,14 @@ export default function DriverScreen({ navigation }) {
   }, []);
 
   // ─── Vehicle-level alert state ─────────────────────────────────────
+  // Show alert when on_route=true OR is_nearest=true
+  // Auto-dismiss when on_route changes to false (no button needed)
+  const [isOnRoute, setIsOnRoute] = useState(false);
   const [isNearest, setIsNearest] = useState(false);
-  const [hasCleared, setHasCleared] = useState(false);
 
   const isAffected = affectedCars.includes(myCarId);
-  // Show alert if either: old-style affected check OR new vehicle-level is_nearest
-  const showAlert = (isDispatched && isAffected && !driverCleared) || (isNearest && !hasCleared);
+  // Show alert if: dispatch is active AND (old-style affected OR vehicle-level on-route/nearest)
+  const showAlert = (isDispatched && isAffected) || isOnRoute || isNearest;
 
   // AI message state
   const [aiMessage, setAiMessage] = useState(null);
@@ -99,15 +98,15 @@ export default function DriverScreen({ navigation }) {
 
   // ─── Initial Vehicle State Sync ────────────────────────────────────
   useEffect(() => {
-    if (activeDispatchId && myCarId && !hasCleared) {
+    if (activeDispatchId && myCarId) {
       getVehicleState(activeDispatchId, myCarId).then((state) => {
         if (state) {
+          if (state.on_route) setIsOnRoute(true);
           if (state.is_nearest) setIsNearest(true);
-          if (state.has_cleared) setHasCleared(true);
         }
       });
     }
-  }, [activeDispatchId, myCarId, hasCleared]);
+  }, [activeDispatchId, myCarId]);
 
   // ─── Refs for event listeners (avoiding stale closures) ────────────
   const deviceRoleRef = useRef(deviceRole);
@@ -138,7 +137,6 @@ export default function DriverScreen({ navigation }) {
           }
 
           console.log('Real-time: active dispatch detected, ID:', newRow.id);
-          const tripDuration = newRow.trip_duration_seconds || 180;
 
           triggerDispatch(
             [myCarId], // Assume affected; vehicle-level check via active_vehicles
@@ -152,8 +150,8 @@ export default function DriverScreen({ navigation }) {
       (updatedRow) => {
         if (updatedRow.status === 'resolved') {
           console.log('Real-time: dispatch resolved, ID:', updatedRow.id);
+          setIsOnRoute(false);
           setIsNearest(false);
-          setHasCleared(false);
           resetDispatch();
         }
       }
@@ -168,6 +166,7 @@ export default function DriverScreen({ navigation }) {
   }, [myCarId, triggerDispatch, resetDispatch]);
 
   // ─── Supabase vehicle subscription ─────────────────────────────────
+  // Auto-dismiss alert when on_route changes to false
   useEffect(() => {
     if (!activeDispatchId || !myCarId || !carIdLoaded) return;
 
@@ -178,16 +177,14 @@ export default function DriverScreen({ navigation }) {
 
     const channel = subscribeToVehicles(activeDispatchId, (updatedRow) => {
       if (updatedRow.car_id === myCarId) {
-        if (updatedRow.is_nearest) {
-          setIsNearest(true);
-        } else {
-          // Only dismiss if driver hasn't cleared
-          if (!hasCleared) {
-            setIsNearest(false);
-          }
-        }
-        if (updatedRow.has_cleared) {
-          setHasCleared(true);
+        // Update on-route status — auto-dismiss when false
+        setIsOnRoute(updatedRow.on_route || false);
+        setIsNearest(updatedRow.is_nearest || false);
+
+        // If car moves off route, auto-dismiss alert
+        if (!updatedRow.on_route && !updatedRow.is_nearest) {
+          console.log('Auto-dismiss: car moved off route');
+          // Alert will auto-dismiss via showAlert becoming false
         }
       }
     });
@@ -200,7 +197,7 @@ export default function DriverScreen({ navigation }) {
         console.log('Real-time: unsubscribed from active_vehicles');
       }
     };
-  }, [activeDispatchId, myCarId, carIdLoaded, hasCleared]);
+  }, [activeDispatchId, myCarId, carIdLoaded]);
 
   // ─── Fetch AI message when alert triggers ──────────────────────────
   useEffect(() => {
@@ -227,13 +224,13 @@ export default function DriverScreen({ navigation }) {
         });
     }
 
-    if (!isDispatched && !isNearest) {
+    if (!isDispatched && !isOnRoute && !isNearest) {
       setAiMessage(null);
       setLoadingMessage(false);
       setIsFlashing(false);
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     }
-  }, [showAlert, isDispatched, isNearest]);
+  }, [showAlert, isDispatched, isOnRoute, isNearest]);
 
   // Cleanup flash timer
   useEffect(() => {
@@ -291,21 +288,6 @@ export default function DriverScreen({ navigation }) {
     return `${mins} ${S.minutesLabel}`;
   };
 
-  // Get destination label from Supabase row if available
-  const destinationLabel = dispatchData
-    ? dispatchData.destination_label
-    : 'Singapore General Hospital';
-
-  // ─── Handle Lane Cleared ───────────────────────────────────────────
-  const handleClearLane = useCallback(async () => {
-    setHasCleared(true);
-    clearLane();
-
-    // Update Supabase
-    if (activeDispatchId && myCarId) {
-      await updateVehicleCleared(activeDispatchId, myCarId);
-    }
-  }, [activeDispatchId, myCarId, clearLane]);
 
   // ─── Reset Device Role ─────────────────────────────────────────────
   const handleResetRole = useCallback(async () => {
@@ -327,37 +309,9 @@ export default function DriverScreen({ navigation }) {
     );
   }
 
-  // ─── CLEARED STATE ─────────────────────────────────────────────────
-  if (hasCleared && isDispatched) {
-    return (
-      <View style={styles.defaultContainer}>
-        <View style={styles.defaultContent}>
-          <View style={styles.statusCircle}>
-            <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
-          </View>
-          <Text style={styles.defaultTitle}>{S.clearedTitle}</Text>
-          <View style={styles.statusBadge}>
-            <View style={styles.greenDot} />
-            <Text style={styles.defaultSubtext}>{S.clearedSubtext}</Text>
-          </View>
-        </View>
-        <View style={styles.carIdBadge}>
-          <Text style={styles.carIdText}>🚗 {myCarId?.toUpperCase().replace('_', ' ')}</Text>
-        </View>
-        <TouchableOpacity style={styles.settingsCorner} onPress={handleResetRole}>
-          <Ionicons name="settings-outline" size={22} color="#475569" />
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   // ─── ALERT STATE ───────────────────────────────────────────────────
+  // No Lane Cleared button — alert auto-dismisses when car moves off-route
   if (showAlert) {
-    // Use destination-templated message
-    const templateMessage = S.alertMessageTemplate
-      ? S.alertMessageTemplate(destinationLabel)
-      : null;
-
     return (
       <Animated.View
         style={[
@@ -374,20 +328,6 @@ export default function DriverScreen({ navigation }) {
         </Animated.View>
 
         <Text style={styles.alertTitle}>{S.alertTitle}</Text>
-
-        {/* Destination info */}
-        {destinationLabel && (
-          <Text style={styles.destinationText}>
-            🏥 Heading to: {destinationLabel}
-          </Text>
-        )}
-
-        {/* Templated message */}
-        {templateMessage && (
-          <View style={styles.templateCard}>
-            <Text style={styles.templateText}>{templateMessage}</Text>
-          </View>
-        )}
 
         {/* AI Message or Loading */}
         <View style={styles.messageCard}>
@@ -416,16 +356,18 @@ export default function DriverScreen({ navigation }) {
           <Text style={styles.carIdText}>🚗 {myCarId?.toUpperCase().replace('_', ' ')}</Text>
         </View>
 
-        {/* Lane Cleared Button */}
-        <TouchableOpacity style={styles.clearButton} onPress={handleClearLane} activeOpacity={0.8}>
-          <Ionicons name="checkmark-circle" size={28} color="#FFF" style={{ marginRight: 10 }} />
-          <Text style={styles.clearButtonText}>{S.clearButtonText}</Text>
-        </TouchableOpacity>
+        {/* Auto-dismiss info */}
+        <View style={styles.autoDismissInfo}>
+          <Ionicons name="information-circle-outline" size={16} color="rgba(254,242,242,0.6)" />
+          <Text style={styles.autoDismissText}>
+            Alert will dismiss automatically when you clear the route
+          </Text>
+        </View>
       </Animated.View>
     );
   }
 
-  // ─── DEFAULT STATE ─────────────────────────────────────────────────
+  // ─── DEFAULT STATE (idle / green screen) ───────────────────────────
   return (
     <View style={styles.defaultContainer}>
       <TouchableOpacity style={styles.settingsCorner} onPress={handleResetRole}>
@@ -434,21 +376,14 @@ export default function DriverScreen({ navigation }) {
 
       <View style={styles.defaultContent}>
         <View style={styles.statusCircle}>
-          <Ionicons
-            name={driverCleared ? 'checkmark-circle' : 'shield-checkmark'}
-            size={64} color="#22C55E"
-          />
+          <Ionicons name="shield-checkmark" size={64} color="#22C55E" />
         </View>
 
-        <Text style={styles.defaultTitle}>
-          {driverCleared ? S.clearedTitle : S.allClear}
-        </Text>
+        <Text style={styles.defaultTitle}>{S.allClear}</Text>
 
         <View style={styles.statusBadge}>
           <View style={styles.greenDot} />
-          <Text style={styles.defaultSubtext}>
-            {driverCleared ? S.clearedSubtext : S.noEmergency}
-          </Text>
+          <Text style={styles.defaultSubtext}>{S.noEmergency}</Text>
         </View>
 
         {/* Car ID badge */}
@@ -506,14 +441,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 1,
   },
   countdownValue: { color: '#FEF2F2', fontSize: 48, fontWeight: '900', marginTop: 4 },
-  clearButton: {
-    backgroundColor: '#22C55E', borderRadius: 16,
-    paddingVertical: 18, paddingHorizontal: 40,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    width: '100%',
-    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+  autoDismissInfo: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 8,
   },
-  clearButtonText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
+  autoDismissText: {
+    color: 'rgba(254, 242, 242, 0.5)', fontSize: 12,
+    fontWeight: '500', marginLeft: 6,
+  },
   defaultContainer: {
     flex: 1, backgroundColor: '#0F172A',
     justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30,

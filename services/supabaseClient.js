@@ -58,6 +58,8 @@ export async function createDispatch(config) {
                 destination_label: config.destination.label,
                 destination_lat: config.destination.lat,
                 destination_lng: config.destination.lng,
+                road_name: config.roadName || 'Route',
+                driver_lane: config.driverLane || 'right',
                 trip_duration_seconds: config.tripDurationSeconds,
             })
             .select()
@@ -197,8 +199,7 @@ export async function insertVehicles(dispatchId, cars) {
             lat: car.lat,
             lng: car.lng,
             on_route: car.onRoute || false,
-            is_nearest: false,
-            has_cleared: false,
+            is_nearest: car.onRoute || false,
         }));
 
         const { error } = await supabase
@@ -219,55 +220,28 @@ export async function insertVehicles(dispatchId, cars) {
 }
 
 /**
- * Bulk update vehicle positions and nearest status
- * Uses upsert-like logic: update each car's row in active_vehicles
+ * Bulk update vehicle positions and on-route/is_nearest status
+ * ALL on-route cars get is_nearest=true simultaneously (no single nearest car logic)
  * @param {string} dispatchId - UUID of the dispatch
- * @param {Array} cars - Array of { id, lat, lng, isNearest, onRoute }
+ * @param {Array} cars - Array of { id, lat, lng, onRoute }
  * @returns {boolean} True if successful
  */
 export async function updateVehiclePositions(dispatchId, cars) {
     if (!supabase) { console.warn('Supabase not configured, skipping vehicle update'); return false; }
     try {
-        // Batch into two calls: one for nearest, one for all others
-        const nearestCar = cars.find((c) => c.isNearest);
-        const otherCars = cars.filter((c) => !c.isNearest);
-
-        const promises = [];
-
-        // Update nearest car
-        if (nearestCar) {
-            promises.push(
-                supabase
-                    .from('active_vehicles')
-                    .update({
-                        lat: nearestCar.lat,
-                        lng: nearestCar.lng,
-                        is_nearest: true,
-                        on_route: nearestCar.onRoute || false,
-                        last_updated: new Date().toISOString(),
-                    })
-                    .eq('dispatch_id', dispatchId)
-                    .eq('car_id', nearestCar.id)
-            );
-        }
-
-        // Update all other cars in one call per car
-        // TODO: optimize to batch update if Supabase supports multi-row conditional updates
-        for (const car of otherCars) {
-            promises.push(
-                supabase
-                    .from('active_vehicles')
-                    .update({
-                        lat: car.lat,
-                        lng: car.lng,
-                        is_nearest: false,
-                        on_route: car.onRoute || false,
-                        last_updated: new Date().toISOString(),
-                    })
-                    .eq('dispatch_id', dispatchId)
-                    .eq('car_id', car.id)
-            );
-        }
+        const promises = cars.map((car) =>
+            supabase
+                .from('active_vehicles')
+                .update({
+                    lat: car.lat,
+                    lng: car.lng,
+                    on_route: car.onRoute || false,
+                    is_nearest: car.onRoute || false,
+                    last_updated: new Date().toISOString(),
+                })
+                .eq('dispatch_id', dispatchId)
+                .eq('car_id', car.id)
+        );
 
         const results = await Promise.all(promises);
         const hasError = results.some((r) => r.error);
@@ -331,33 +305,7 @@ export function subscribeToVehicles(dispatchId, onUpdate) {
     return channel;
 }
 
-/**
- * Mark a specific vehicle as has_cleared = true
- * @param {string} dispatchId - UUID of the dispatch
- * @param {string} carId - The car_id string (e.g. "car_a")
- * @returns {boolean} True if successful
- */
-export async function updateVehicleCleared(dispatchId, carId) {
-    if (!supabase) { console.warn('Supabase not configured, skipping vehicle cleared update'); return false; }
-    try {
-        const { error } = await supabase
-            .from('active_vehicles')
-            .update({ has_cleared: true, last_updated: new Date().toISOString() })
-            .eq('dispatch_id', dispatchId)
-            .eq('car_id', carId);
-
-        if (error) {
-            console.error('Supabase updateVehicleCleared error:', error.message);
-            return false;
-        }
-
-        console.log(`✅ Vehicle ${carId} marked as cleared for dispatch ${dispatchId}`);
-        return true;
-    } catch (err) {
-        console.error('Supabase updateVehicleCleared error:', err);
-        return false;
-    }
-}
+// TODO: future enhancement — add function for driver-initiated acknowledgement if needed
 
 /**
  * Fetch initial state of a vehicle for a specific dispatch
