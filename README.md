@@ -1,7 +1,6 @@
 # ClearPath
 
 > Emergency Vehicle Priority via Pre-Emptive Lane Clearance  
-> Community Safety Hackathon 2026
 
 ClearPath is a mobile application demonstrating the core concept of 
 Dispatch: an API-driven broadcast layer that delivers calm, targeted 
